@@ -1,10 +1,7 @@
-USE [DbUtils]
+IF OBJECT_ID('dbo.sp_DatabaseRestore') IS NULL
+	EXEC ('CREATE PROCEDURE dbo.sp_DatabaseRestore AS RETURN 0;')
 GO
-/****** Object:  StoredProcedure [dbo].[sp_DatabaseRestore]    Script Date: 12/12/2023 13:50:33 ******/
-SET ANSI_NULLS ON
-GO
-SET QUOTED_IDENTIFIER ON
-GO
+
 ALTER PROCEDURE [dbo].[sp_DatabaseRestore]
     @Database NVARCHAR(128) = NULL, 
     @RestoreDatabaseName NVARCHAR(128) = NULL, 
