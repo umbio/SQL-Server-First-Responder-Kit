@@ -1,5 +1,9 @@
-IF OBJECT_ID('dbo.sp_DatabaseRestore') IS NULL
-	EXEC ('CREATE PROCEDURE dbo.sp_DatabaseRestore AS RETURN 0;');
+USE [DbUtils]
+GO
+/****** Object:  StoredProcedure [dbo].[sp_DatabaseRestore]    Script Date: 12/12/2023 13:50:33 ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
 GO
 ALTER PROCEDURE [dbo].[sp_DatabaseRestore]
     @Database NVARCHAR(128) = NULL, 
@@ -33,6 +37,7 @@ ALTER PROCEDURE [dbo].[sp_DatabaseRestore]
     @FixOrphanUsers BIT = 0,
     @KeepCdc BIT = 0,
     @Execute CHAR(1) = Y,
+	@FileExtensionBak NVARCHAR(128) = NULL,
     @FileExtensionDiff NVARCHAR(128) = NULL,
     @Debug INT = 0, 
     @Help BIT = 0,
@@ -102,6 +107,7 @@ BEGIN
 		
 	PRINT '
 	/*
+		
 	EXEC dbo.sp_DatabaseRestore 
 		@Database = ''LogShipMe'', 
 		@BackupPathFull = ''D:\Backup\SQL2016PROD1A\LogShipMe\FULL\'', 
@@ -204,6 +210,14 @@ BEGIN
 		@RunRecovery = 1,
 		@TestRestore = 1,
 		@RunCheckDB = 1,
+		@Debug = 0,
+		@Execute = ''N'';
+	
+	--Parameter @FileExtensionBak indicates the file extension, in case backups have a different extension than default (.bak)
+	EXEC dbo.sp_DatabaseRestore
+		@Database = ''DBA'', 
+		@BackupPathFull = ''\\StorageServer\LogShipMe\FULL\'',
+		@FileExtensionBak = '.DUMP',
 		@Debug = 0,
 		@Execute = ''N'';
 	';
@@ -520,6 +534,17 @@ BEGIN
 	SET @FileExtensionDiff = REPLACE(@FileExtensionDiff,'.','');
 END
 
+IF @FileExtensionBak IS NULL
+BEGIN
+	IF @Execute = 'Y' OR @Debug = 1 RAISERROR('No @FileExtensionBak given, assuming "bak".', 0, 1) WITH NOWAIT;
+	SET @FileExtensionBak = 'bak';
+END
+IF @FileExtensionBak LIKE '%.%'
+BEGIN
+	IF @Execute = 'Y' OR @Debug = 1 RAISERROR('Removing "." from @FileExtensionBak', 0, 1) WITH NOWAIT;
+	SET @FileExtensionBak = REPLACE(@FileExtensionBak,'.','');
+END
+
 SET @RestoreDatabaseID = DB_ID(@RestoreDatabaseName);
 SET @RestoreDatabaseName = QUOTENAME(@RestoreDatabaseName);
 SET @UnquotedRestoreDatabaseName = PARSENAME(@RestoreDatabaseName,1);
@@ -665,13 +690,13 @@ BEGIN
 		BEGIN
 			DELETE
 			FROM @FileList
-			WHERE BackupFile LIKE N'%[_][0-9].bak'
+			WHERE BackupFile LIKE N'%[_][0-9].' + @FileExtensionBak
 			AND	BackupFile LIKE N'%' + @Database + N'%'
 			AND	(REPLACE( RIGHT( REPLACE( BackupFile, RIGHT( BackupFile, PATINDEX( '%_[0-9][0-9]%', REVERSE( BackupFile ) ) ), '' ), 16 ), '_', '' ) > @StopAt);
 
 			DELETE
 			FROM @FileList
-			WHERE BackupFile LIKE N'%[_][0-9][0-9].bak'
+			WHERE BackupFile LIKE N'%[_][0-9][0-9].' + @FileExtensionBak
 			AND	BackupFile LIKE N'%' + @Database + N'%'
 			AND	(REPLACE( RIGHT( REPLACE( BackupFile, RIGHT( BackupFile, PATINDEX( '%_[0-9][0-9]%', REVERSE( BackupFile ) ) ), '' ), 18 ), '_', '' ) > @StopAt);
 		END;
@@ -679,7 +704,7 @@ BEGIN
     -- Find latest full backup 
     SELECT @LastFullBackup = MAX(BackupFile)
     FROM @FileList
-    WHERE BackupFile LIKE N'%.bak'
+    WHERE BackupFile LIKE N'%.'+ @FileExtensionBak
         AND
         BackupFile LIKE N'%' + @Database + N'%'
 	    AND
@@ -1653,4 +1678,3 @@ IF @TestRestore = 1
 IF OBJECT_ID( 'tempdb..#SplitFullBackups' ) IS NOT NULL DROP TABLE #SplitFullBackups;
 IF OBJECT_ID( 'tempdb..#SplitDiffBackups' ) IS NOT NULL DROP TABLE #SplitDiffBackups;
 IF OBJECT_ID( 'tempdb..#SplitLogBackups' ) IS NOT NULL DROP TABLE #SplitLogBackups;
-GO
